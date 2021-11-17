@@ -8,6 +8,7 @@ import android.Manifest;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.GnssStatus;
 import android.location.Location;
@@ -16,6 +17,8 @@ import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.widget.Toast;
 
 import com.google.android.gms.location.Geofence;
@@ -33,6 +36,7 @@ import com.google.android.gms.maps.model.MarkerOptions;
 public class MapsActivity extends AppCompatActivity implements LocationListener, OnMapReadyCallback {
 
     private static final String TAG = "Location: ";
+    private static final String TAG2 = "Button: ";
     final private int REQUEST_CODE_ASK_PERMISSIONS = 123;
 
     private Geofence mGeofence;
@@ -43,7 +47,7 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
     private GoogleMap mMap;
     private LocationManager mLocationManager;
 
-    private Toolbar mToolbar;
+    private boolean autoCameraButtonPressed;
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
@@ -51,10 +55,17 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
 
+        final Toolbar mToolbar = findViewById(R.id.appToolbar);
+        setSupportActionBar(mToolbar);
+
         // Set up Google Maps
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+
+        //load value of autoCameraButtonPressed
+        SharedPreferences prefs = getSharedPreferences("LocationPlusStorage", MODE_PRIVATE);
+        autoCameraButtonPressed = prefs.getBoolean("autoCameraButton",false);
 
         // Set up Geofencing Client
         mGeofencingClient = LocationServices.getGeofencingClient(MapsActivity.this);
@@ -71,9 +82,31 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
 
         // [TODO] Additional setup for viewing satellite information (lists, adapters, etc.)
 
-        // Set up Toolbar
-        mToolbar = (Toolbar) findViewById(R.id.appToolbar);
-        setSupportActionBar(mToolbar);
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        final Toolbar mToolbar = (Toolbar) findViewById(R.id.appToolbar);
+        mToolbar.inflateMenu(R.menu.menu_buttons);
+        mToolbar.setOnMenuItemClickListener(item -> onOptionsItemSelected(item));
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch(item.getItemId()) {
+            // [TODO] Using this as an example, implement behavior when a mask option is pressed.
+            case R.id.satelliteInfoButton:
+                Log.e(TAG2,"satelliteInfoButton pressed");
+                break;
+            case R.id.autoCameraButton:
+                Log.e(TAG2,"autoCameraButton pressed");
+                autoCameraButtonPressed = !autoCameraButtonPressed;
+                break;
+            default:
+                break;
+        }
+        return true;
     }
 
     @Override
@@ -90,7 +123,7 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
     @Override
     public void onLocationChanged(Location location) {
         // [TODO] Implement behavior when a location update is received
-        Log.i(TAG,"Location Changed");
+        Log.e(TAG,"Location Changed");
 
         mMap.clear();
 
@@ -102,7 +135,9 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
                 .title("Current Location"));
 
         //auto-centering
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(loc, 15));
+        if(autoCameraButtonPressed == true){
+            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(loc, 15));
+        }
     }
 
     /*
@@ -184,6 +219,10 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
         super.onPause();
 
         // [TODO] Data saving
+        //save autoCameraButtonPressed state
+        SharedPreferences.Editor  mEditor = getSharedPreferences("LocationPlusStorage", MODE_PRIVATE).edit();
+        mEditor.putBoolean("autoCameraButton", autoCameraButtonPressed).apply();
+
     }
 
     @RequiresApi(api = Build.VERSION_CODES.N)
