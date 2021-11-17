@@ -18,7 +18,7 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="@string/google_maps_key" />
+            android:value="AIzaSyA-8Y7wmqmBuy8Q22FUy7W8aV0gH_JpQXs" />
 
         <receiver
             android:name=".GeofenceBroadcastReceiver"

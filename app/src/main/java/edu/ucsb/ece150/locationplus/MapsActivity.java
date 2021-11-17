@@ -15,18 +15,24 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Toast;
 
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofencingClient;
 import com.google.android.gms.location.GeofencingRequest;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.MarkerOptions;
 
 public class MapsActivity extends AppCompatActivity implements LocationListener, OnMapReadyCallback {
 
+    private static final String TAG = "Location: ";
     final private int REQUEST_CODE_ASK_PERMISSIONS = 123;
 
     private Geofence mGeofence;
@@ -84,6 +90,19 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
     @Override
     public void onLocationChanged(Location location) {
         // [TODO] Implement behavior when a location update is received
+        Log.i(TAG,"Location Changed");
+
+        mMap.clear();
+
+        final LatLng loc = new LatLng(location.getLatitude(), location.getLongitude());
+
+        mMap.addMarker(new MarkerOptions()
+                .position(loc)
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
+                .title("Current Location"));
+
+        //auto-centering
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(loc, 15));
     }
 
     /*
@@ -136,22 +155,18 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
         if (hasBackgroundLocationPermissions != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Manifest.permission.ACCESS_BACKGROUND_LOCATION},
                     REQUEST_CODE_ASK_PERMISSIONS);
-            return;
         }
         if (hasCoarseLocationPermissions != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Manifest.permission.ACCESS_COARSE_LOCATION},
                     REQUEST_CODE_ASK_PERMISSIONS);
-            return;
         }
         if (hasFineLocationPermissions != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Manifest.permission.ACCESS_FINE_LOCATION},
                     REQUEST_CODE_ASK_PERMISSIONS);
-            return;
         }
         if (hasInternetPermissions != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Manifest.permission.INTERNET},
                     REQUEST_CODE_ASK_PERMISSIONS);
-            return;
         }
         mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this);
         mLocationManager.registerGnssStatusCallback(mGnssStatusCallback);
