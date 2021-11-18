@@ -1,15 +1,24 @@
 package edu.ucsb.ece150.locationplus;
 
+import static com.google.android.gms.location.Geofence.NEVER_EXPIRE;
+
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.constraintlayout.widget.ConstraintSet;
+import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.GnssStatus;
 import android.location.Location;
 import android.location.LocationListener;
@@ -19,8 +28,14 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.gms.common.internal.Constants;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofencingClient;
 import com.google.android.gms.location.GeofencingRequest;
@@ -30,8 +45,16 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+
+import java.util.ArrayList;
 
 public class MapsActivity extends AppCompatActivity implements LocationListener, OnMapReadyCallback {
 
@@ -45,7 +68,20 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
 
     private GnssStatus.Callback mGnssStatusCallback;
     private GoogleMap mMap;
+    private Marker currentLocation;
+    private Marker destination;
+    private Circle circle;
+    private double latitude;
+    private double longitude;
     private LocationManager mLocationManager;
+    private FloatingActionButton cancelFab;
+    private FloatingActionButton backFab;
+    private TextView satelliteCountTextView;
+    private TextView satelliteFixCountTextView;
+
+    private ArrayList<Satellite> satelliteArray;
+    private ArrayAdapter adapter;
+    private ListView satelliteList;
 
     private boolean autoCameraButtonPressed;
 
@@ -58,14 +94,50 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
         final Toolbar mToolbar = findViewById(R.id.appToolbar);
         setSupportActionBar(mToolbar);
 
+        satelliteCountTextView = findViewById(R.id.satelliteCount);
+        satelliteFixCountTextView = findViewById(R.id.satelliteFixCount);
+
+
+        backFab = findViewById(R.id.backFab);
+        backFab.setVisibility(View.INVISIBLE);
+        backFab.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                satelliteList.setVisibility(View.INVISIBLE);
+                backFab.setVisibility(View.INVISIBLE);
+            }
+        });
+
+        if(satelliteArray == null){
+            satelliteArray = new ArrayList<>();
+        }
+        satelliteList = findViewById(R.id.satelliteList);
+        satelliteList.setVisibility(View.INVISIBLE);
+        satelliteList.setBackgroundColor(Color.WHITE);
+        adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, satelliteArray);
+        satelliteList.setAdapter(adapter);
+
+
+        cancelFab = findViewById(R.id.cancelFab);
+        cancelFab.setVisibility(View.INVISIBLE);
+        cancelFab.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                removeEverything();
+            }
+        });
+
         // Set up Google Maps
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
-
-        //load value of autoCameraButtonPressed
         SharedPreferences prefs = getSharedPreferences("LocationPlusStorage", MODE_PRIVATE);
-        autoCameraButtonPressed = prefs.getBoolean("autoCameraButton",false);
+        //load value of autoCameraButtonPressed
+        autoCameraButtonPressed = prefs.getBoolean("autoCameraButton", false);
+
+        //load destination parameters
+        latitude = (double) prefs.getFloat("latitude", 0);
+        longitude = (double) prefs.getFloat("longitude", 0);
 
         // Set up Geofencing Client
         mGeofencingClient = LocationServices.getGeofencingClient(MapsActivity.this);
@@ -74,13 +146,75 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
         mLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
         mGnssStatusCallback = new GnssStatus.Callback() {
+            @RequiresApi(api = Build.VERSION_CODES.O)
             @Override
             public void onSatelliteStatusChanged(GnssStatus status) {
                 // [TODO] Implement behavior when the satellite status is updated
+                super.onSatelliteStatusChanged(status);
+
+                satelliteArray.clear();
+
+                int satelliteCount = status.getSatelliteCount();
+                int satelliteFixCount = 0;
+
+                for(int sat = 0; sat<satelliteCount; sat++ ){
+                    double azimuth = status.getAzimuthDegrees(sat);
+                    double elevation = status.getElevationDegrees(sat);
+                    double carrierFrequency = status.getCarrierFrequencyHz(sat);
+                    double noiseDensity = status.getCn0DbHz(sat);
+                    int constellationName = status.getConstellationType(sat);
+                    int SVID = status.getSvid(sat);
+                    if(status.usedInFix(sat)){
+                        satelliteFixCount++;
+                    }
+                    Satellite satellite = new Satellite(sat + 1,azimuth,elevation,carrierFrequency,noiseDensity,constellationName,SVID);
+                    satelliteArray.add(satellite);
+                }
+                Log.e("SATELLITEINFO", "Satelitte Total Count: "+ satelliteCount);
+                Log.e("SATELLITEINFO", "Satelitte Fix Count: "+ satelliteFixCount);
+                satelliteCountTextView.setText("" + satelliteCount);
+                satelliteFixCountTextView.setText("" + satelliteFixCount);
+                adapter.notifyDataSetChanged();
+
             }
         };
 
         // [TODO] Additional setup for viewing satellite information (lists, adapters, etc.)
+        satelliteList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                double azimuth = satelliteArray.get(position).azimuth;
+                double elevation = satelliteArray.get(position).elevation;
+                double carrierFrequency = satelliteArray.get(position).carrierFrequency;
+                double noiseDensity = satelliteArray.get(position).noiseDensity;
+                int constellationName = satelliteArray.get(position).constellationName;
+                int SVID = satelliteArray.get(position).SVID;
+                String constellationDictionary[] = {"UNKNOWN", "GPS", "SBAS", "GLOSNASS", "QZSS", "BEIDOU", "GALILEO", "IRNSS"};
+
+                AlertDialog.Builder builder
+                        = new AlertDialog
+                        .Builder(MapsActivity.this);
+                builder.setTitle("Satellite " + satelliteArray.get(position).satelliteNum);
+                builder.setMessage("Azimuth: " + azimuth + "\u00B0" + "\n"
+                        + "Elevation: " + elevation + "\u00B0" + "\n" + "\n"
+                        + "Carrier Frequency: " + carrierFrequency + "Hz" + "\n"
+                        + "C/ND: " + noiseDensity + "dB Hz" + "\n" + "\n"
+                        + "Constellation: " + constellationDictionary[constellationName] + "\n"
+                        + "SVID: " + SVID);
+                builder
+                        .setPositiveButton(
+                                "OK",
+                                new DialogInterface
+                                        .OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        dialog.cancel();
+                                    }
+                                });
+                AlertDialog alertDialog = builder.create();
+                alertDialog.show();
+            }
+        });
 
     }
 
@@ -94,13 +228,14 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch(item.getItemId()) {
-            // [TODO] Using this as an example, implement behavior when a mask option is pressed.
+        switch (item.getItemId()) {
             case R.id.satelliteInfoButton:
-                Log.e(TAG2,"satelliteInfoButton pressed");
+                Log.e(TAG2, "satelliteInfoButton pressed");
+                satelliteList.setVisibility(View.VISIBLE);
+                backFab.setVisibility(View.VISIBLE);
                 break;
             case R.id.autoCameraButton:
-                Log.e(TAG2,"autoCameraButton pressed");
+                Log.e(TAG2, "autoCameraButton pressed");
                 autoCameraButtonPressed = !autoCameraButtonPressed;
                 break;
             default:
@@ -109,15 +244,97 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
         return true;
     }
 
+    @SuppressLint("MissingPermission")
+    public void createDestinationMarker(LatLng latLng){
+        cancelFab.show();
+        mGeofence = new Geofence.Builder()
+                .setRequestId("destination")
+                .setCircularRegion(
+                        latLng.latitude,
+                        latLng.longitude,
+                        100
+                )
+                .setExpirationDuration(-1)
+                .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
+                .build();
+        Log.e(TAG, mGeofence.toString());
+        mGeofencingClient.addGeofences(
+                getGeofenceRequest(),
+                getGeofencePendingIntent());
+        destination = mMap.addMarker(new MarkerOptions()
+                .position(latLng)
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                .title("Destination"));
+        circle = mMap.addCircle(new CircleOptions()
+                .center(latLng)
+                .radius(100)
+                .strokeColor(Color.RED)
+                .strokeWidth(5)
+                .fillColor(Color.argb(128,255,0,0)));
+    }
+
+    public void removeEverything(){
+        destination.remove();
+        circle.remove();
+        mGeofencingClient.removeGeofences(getGeofencePendingIntent());
+        final LatLng loc = new LatLng(0, 0);
+        destination.setPosition(loc);
+        SharedPreferences.Editor mEditor = getSharedPreferences("LocationPlusStorage", MODE_PRIVATE).edit();
+        mEditor.putFloat("latitude", 0).apply();
+        mEditor.putFloat("longitude", 0).apply();
+        cancelFab.hide();
+    }
+
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
 
         // [TODO] Implement behavior when Google Maps is ready
-
+        if (destination == null && latitude != 0 && longitude != 0) {
+            LatLng loc = new LatLng(latitude, longitude);
+            createDestinationMarker(loc);
+        }
         // [TODO] In addition, add a listener for long clicks (which is the starting point for
         // creating a Geofence for the destination and listening for transitions that indicate
         // arrival)
+        mMap.setOnMapLongClickListener(new GoogleMap.OnMapLongClickListener() {
+            @Override
+            public void onMapLongClick(LatLng latLng) {
+                if (destination == null || (destination.getPosition().latitude == 0 && destination.getPosition().longitude == 0)) {
+                    AlertDialog.Builder builder
+                            = new AlertDialog
+                            .Builder(MapsActivity.this);
+                    builder.setTitle("Confirm Destination");
+                    builder.setMessage("Set postition " + latLng.toString() + " as your destination?");
+                    builder
+                            .setPositiveButton(
+                                    "Yes",
+                                    new DialogInterface
+                                            .OnClickListener() {
+
+                                        @SuppressLint("MissingPermission")
+                                        @Override
+                                        public void onClick(DialogInterface dialog, int which) {
+                                            createDestinationMarker(latLng);
+                                        }
+                                    });
+                    builder
+                            .setNegativeButton(
+                                    "No",
+                                    new DialogInterface
+                                            .OnClickListener() {
+
+                                        @Override
+                                        public void onClick(DialogInterface dialog, int which) {
+                                            dialog.cancel();
+                                        }
+                                    });
+                    AlertDialog alertDialog = builder.create();
+                    alertDialog.show();
+                }
+            }
+        });
+
     }
 
     @Override
@@ -125,11 +342,13 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
         // [TODO] Implement behavior when a location update is received
         Log.e(TAG,"Location Changed");
 
-        mMap.clear();
+        if(currentLocation != null){
+            currentLocation.remove();
+        }
 
         final LatLng loc = new LatLng(location.getLatitude(), location.getLongitude());
 
-        mMap.addMarker(new MarkerOptions()
+        currentLocation = mMap.addMarker(new MarkerOptions()
                 .position(loc)
                 .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
                 .title("Current Location"));
@@ -161,7 +380,7 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
         // inside the Geofence when it is created)
 
         return new GeofencingRequest.Builder()
-                //.setInitialTrigger()  <--  Add triggers here
+                .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER )
                 .addGeofence(mGeofence)
                 .build();
     }
@@ -219,9 +438,17 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
         super.onPause();
 
         // [TODO] Data saving
-        //save autoCameraButtonPressed state
         SharedPreferences.Editor  mEditor = getSharedPreferences("LocationPlusStorage", MODE_PRIVATE).edit();
+        //save autoCameraButtonPressed state
         mEditor.putBoolean("autoCameraButton", autoCameraButtonPressed).apply();
+
+        //save destination
+        if(destination != null){
+            double latitude = destination.getPosition().latitude;
+            double longitude = destination.getPosition().longitude;
+            mEditor.putFloat("latitude", (float)latitude).apply();
+            mEditor.putFloat("longitude", (float)longitude).apply();
+        }
 
     }
 

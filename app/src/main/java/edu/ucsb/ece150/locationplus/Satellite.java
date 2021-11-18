@@ -11,14 +11,29 @@ package edu.ucsb.ece150.locationplus;
 public class Satellite {
 
     // [TODO] Define private member variables
+    int satelliteNum;
+    double azimuth;
+    double elevation;
+    double carrierFrequency;
+    double noiseDensity;
+    int constellationName;
+    int SVID;
 
     // [TODO] Write the constructor
-    public Satellite() {}
+    public Satellite(int satelliteNum, double azimuth, double elevation, double carrierFrequency, double noiseDensity, int constellationName, int SVID) {
+        this.satelliteNum = satelliteNum;
+        this.azimuth = azimuth;
+        this.elevation = elevation;
+        this.carrierFrequency = carrierFrequency;
+        this.noiseDensity = noiseDensity;
+        this.constellationName = constellationName;
+        this.SVID = SVID;
+    }
 
     // [TODO] Implement the toString() method. When the Adapter tries to assign names to items
     // in the ListView, it calls the toString() method of the objects in the ArrayList
     @Override
     public String toString() {
-        return "STUB";
+        return "Satellite " + satelliteNum;
     }
 }
