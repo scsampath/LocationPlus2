@@ -60,7 +60,7 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
 
     private static final String TAG = "Location: ";
     private static final String TAG2 = "Button: ";
-    final private int REQUEST_CODE_ASK_PERMISSIONS = 123;
+    final private int REQUEST_CODE_ASK_PERMISSIONS = 125;
 
     private Geofence mGeofence;
     private GeofencingClient mGeofencingClient;
@@ -406,6 +406,7 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
         int hasFineLocationPermissions = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION);
         int hasInternetPermissions = checkSelfPermission(Manifest.permission.INTERNET);
 
+
         if (hasBackgroundLocationPermissions != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Manifest.permission.ACCESS_BACKGROUND_LOCATION},
                     REQUEST_CODE_ASK_PERMISSIONS);
@@ -422,8 +423,10 @@ public class MapsActivity extends AppCompatActivity implements LocationListener,
             requestPermissions(new String[] {Manifest.permission.INTERNET},
                     REQUEST_CODE_ASK_PERMISSIONS);
         }
-        mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this);
-        mLocationManager.registerGnssStatusCallback(mGnssStatusCallback);
+        if (hasBackgroundLocationPermissions == PackageManager.PERMISSION_GRANTED && hasCoarseLocationPermissions == PackageManager.PERMISSION_GRANTED && hasFineLocationPermissions == PackageManager.PERMISSION_GRANTED && hasInternetPermissions == PackageManager.PERMISSION_GRANTED) {
+            mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this);
+            mLocationManager.registerGnssStatusCallback(mGnssStatusCallback);
+        }
     }
 
     @Override
